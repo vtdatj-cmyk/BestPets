@@ -81,9 +81,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
             end
 
             if not model or not viewport or not viewport.Parent then
-                if viewport then
-                    viewport:SetAttribute("IsRendering", nil)
-                end
+                if viewport then viewport:SetAttribute("IsRendering", nil) end
                 return
             end
 
@@ -113,9 +111,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
 
                 local _, size = model:GetBoundingBox()
                 local maxDim = math.max(size.X, size.Y, size.Z)
-                if maxDim <= 0.1 then
-                    maxDim = 3
-                end
+                if maxDim <= 0.1 then maxDim = 3 end
 
                 local dist = maxDim * 1.65
                 cam.CFrame = CFrame.new(Vector3.new(dist * 0.85, dist * 0.65, dist * 0.85), Vector3.new(0, 0, 0))
