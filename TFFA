@@ -8,32 +8,35 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
     local accumulatedTopAfkPets = {}
     local ignoredTopAfkIds = {}
     
-    if type(SavedConfig.IgnoredTopAfkIds) == "table" then
-        for k, v in pairs(SavedConfig.IgnoredTopAfkIds) do
-            if v == true then ignoredTopAfkIds[tostring(k)] = true end
+    if type(SavedConfig) == "table" then
+        if type(SavedConfig.IgnoredTopAfkIds) == "table" then
+            for k, v in pairs(SavedConfig.IgnoredTopAfkIds) do
+                if v == true then ignoredTopAfkIds[tostring(k)] = true end
+            end
         end
-    end
 
-    if type(SavedConfig.TopAfkPets) == "table" then
-        for _, item in ipairs(SavedConfig.TopAfkPets) do
-            if type(item) == "table" and item.Id and item.ModelName and not ignoredTopAfkIds[tostring(item.Id)] then
-                local rName = tostring(item.RarityName or "Common")
-                local rInfo = RarityConfigRemote.Get(rName)
-                table.insert(accumulatedTopAfkPets, {
-                    Id = tostring(item.Id),
-                    ModelName = tostring(item.ModelName),
-                    PetName = tostring(item.PetName or AnimalNamesMap[item.ModelName] or item.ModelName),
-                    Mutation = item.Mutation,
-                    RawIncome = tonumber(item.RawIncome) or 0,
-                    SellPriceVal = tonumber(item.SellPriceVal) or 0,
-                    RarityName = rInfo.Name or rName,
-                    RarityColor = rInfo.Color or Color3.fromRGB(190, 190, 200)
-                })
+        if type(SavedConfig.TopAfkPets) == "table" then
+            for _, item in ipairs(SavedConfig.TopAfkPets) do
+                if type(item) == "table" and item.Id and item.ModelName and not ignoredTopAfkIds[tostring(item.Id)] then
+                    local rName = tostring(item.RarityName or "Common")
+                    local rInfo = (RarityConfigRemote and RarityConfigRemote.Get) and RarityConfigRemote.Get(rName) or {Name = rName, Color = Color3.fromRGB(190, 190, 200)}
+                    table.insert(accumulatedTopAfkPets, {
+                        Id = tostring(item.Id),
+                        ModelName = tostring(item.ModelName),
+                        PetName = tostring(item.PetName or (AnimalNamesMap and AnimalNamesMap[item.ModelName]) or item.ModelName),
+                        Mutation = item.Mutation,
+                        RawIncome = tonumber(item.RawIncome) or 0,
+                        SellPriceVal = tonumber(item.SellPriceVal) or 0,
+                        RarityName = rInfo.Name or rName,
+                        RarityColor = rInfo.Color or Color3.fromRGB(190, 190, 200)
+                    })
+                end
             end
         end
     end
 
     local function saveTopAfkConfig()
+        if type(SavedConfig) ~= "table" then return end
         local serializedList = {}
         for _, pet in ipairs(accumulatedTopAfkPets) do
             table.insert(serializedList, {
@@ -48,7 +51,9 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
         end
         SavedConfig.TopAfkPets = serializedList
         SavedConfig.IgnoredTopAfkIds = ignoredTopAfkIds
-        saveConfigData()
+        if type(saveConfigData) == "function" then
+            pcall(saveConfigData)
+        end
     end
 
     function BestPetModule.UpdateFrames()
@@ -65,9 +70,16 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
             if child.Name:lower():gsub("%s+", "") == "autofarm" then autoFarmPage = child break end
         end
         autoFarmPage = autoFarmPage or contentArea:FindFirstChild("Auto Farm")
-        if not autoFarmPage or not DataController then return end
+        if not autoFarmPage or not DataContainer or not DataController then 
+            -- Hỗ trợ tìm linh hoạt nếu DataController tồn tại
+            if not DataController then return end
+        end
 
-        local animals = DataController:Get("Animals") or {}
+        local animals = {}
+        pcall(function()
+            animals = DataController:Get("Animals") or {}
+        end)
+
         local bestIncome = LocalPlayer:GetAttribute("BestIncome") or 0
         local hasNewData = false
 
@@ -82,7 +94,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                 if not foundInAccumulated then
                     hasNewData = true
                     local modelName = entry.ModelName or entry.Name or "DefaultPet"
-                    local petName = entry.PetName or entry.DisplayName or AnimalNamesMap[modelName] or modelName or "Unknown"
+                    local petName = entry.PetName or entry.DisplayName or (AnimalNamesMap and AnimalNamesMap[modelName]) or modelName or "Unknown"
                     local sellPrice, incomeVal = 0, 0
                     if Mutations then
                         pcall(function()
@@ -97,7 +109,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         elseif type(entry.Rarity) == "table" then rarityName = entry.Rarity.Name or entry.Rarity[1] or "Common" end
                     end
 
-                    local rarityInfo = RarityConfigRemote.Get(rarityName)
+                    local rarityInfo = (RarityConfigRemote and RarityConfigRemote.Get) and RarityConfigRemote.Get(rarityName) or {Name = rarityName, Color = Color3.fromRGB(190, 190, 200)}
                     table.insert(accumulatedTopAfkPets, {
                         Id = strId,
                         ModelName = modelName,
@@ -121,6 +133,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
 
         if hasNewData then saveTopAfkConfig() end
 
+        -- Xử lý an toàn Header Container
         local headerFrame = autoFarmPage:FindFirstChild("TopAfkHeaderContainer")
         if not headerFrame then
             headerFrame = Instance.new("Frame")
@@ -153,15 +166,19 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
 
             clearBtn.MouseButton1Click:Connect(function()
                 if DataController then
-                    local currentAnimals = DataController:Get("Animals") or {}
-                    for id, _ in pairs(currentAnimals) do ignoredTopAfkIds[tostring(id)] = true end
+                    pcall(function()
+                        local currentAnimals = DataController:Get("Animals") or {}
+                        for id, _ in pairs(currentAnimals) do ignoredTopAfkIds[tostring(id)] = true end
+                    end)
                 end
                 accumulatedTopAfkPets = {}
                 saveTopAfkConfig()
                 for _, child in ipairs(autoFarmPage:GetChildren()) do
                     if child.Name:match("^TopAfkRow_") then child:Destroy() end
                 end
-                Window:Notify({Title = "Top Afk", Content = "Đã xóa sạch và làm mới danh sách Top Afk!", Duration = 2})
+                if Window and Window.Notify then
+                    Window:Notify({Title = "Top Afk", Content = "Đã làm mới danh sách thành công!", Duration = 2})
+                end
             end)
         end
 
@@ -183,8 +200,8 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
 
         local finalGroupedList = {}
         for _, gPet in pairs(groupedMap) do
-            gPet.FormattedPrice = formatMoneySafe(gPet.SellPriceVal)
-            gPet.FormattedIncome = formatMoneySafe(gPet.RawIncome)
+            gPet.FormattedPrice = (type(formatMoneySafe) == "function") and formatMoneySafe(gPet.SellPriceVal) or tostring(gPet.SellPriceVal)
+            gPet.FormattedIncome = (type(formatMoneySafe) == "function") and formatMoneySafe(gPet.RawIncome) or tostring(gPet.RawIncome)
             table.insert(finalGroupedList, gPet)
         end
 
@@ -262,7 +279,6 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         iconFrame.Parent = petCard
                         Instance.new("UICorner", iconFrame).CornerRadius = UDim.new(0, 6)
 
-                        -- Hiển thị tên Model viết tắt gọn gàng thay cho ảnh bị lỗi
                         local shortNameLbl = Instance.new("TextLabel", iconFrame)
                         shortNameLbl.Name = "ShortModelName"
                         shortNameLbl.Size = UDim2.new(1, 0, 1, 0)
@@ -290,28 +306,38 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     end
 
                     local mutLbl = petCard:FindFirstChild("MutationLabel")
-                    mutLbl.Size, mutLbl.Position, mutLbl.TextSize, mutLbl.Font = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 2), 10, Enum.Font.GothamBold
-                    local mutName = tostring(petData.Mutation or "None")
-                    if mutName ~= "" and mutName ~= "None" and mutName ~= "nil" then
-                        mutLbl.Visible = true
-                        mutLbl.Text = "✨ " .. mutName
-                        local mutConfigData = MutationsConfigRemote.Get and MutationsConfigRemote.Get(mutName)
-                        mutLbl.TextColor3 = (mutConfigData and mutConfigData.Color) or Color3.fromRGB(255, 180, 50)
-                    else
-                        mutLbl.Visible = false
+                    if mutLbl then
+                        mutLbl.Size, mutLbl.Position, mutLbl.TextSize, mutLbl.Font = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 2), 10, Enum.Font.GothamBold
+                        local mutName = tostring(petData.Mutation or "None")
+                        if mutName ~= "" and mutName ~= "None" and mutName ~= "nil" then
+                            mutLbl.Visible = true
+                            mutLbl.Text = "✨ " .. mutName
+                            local mutConfigData = (MutationsConfigRemote and MutationsConfigRemote.Get) and MutationsConfigRemote.Get(mutName) or nil
+                            mutLbl.TextColor3 = (mutConfigData and mutConfigData.Color) or Color3.fromRGB(255, 180, 50)
+                        else
+                            mutLbl.Visible = false
+                        end
                     end
 
                     local nLbl = petCard:FindFirstChild("NameLabel")
-                    nLbl.Size, nLbl.Position, nLbl.TextSize, nLbl.Font, nLbl.Text, nLbl.TextColor3 = UDim2.new(1, -58, 0, 16), UDim2.new(0, 58, 0, 16), 12, Enum.Font.GothamBold, tostring(petData.PetName), Color3.fromRGB(240, 253, 244)
+                    if nLbl then
+                        nLbl.Size, nLbl.Position, nLbl.TextSize, nLbl.Font, nLbl.Text, nLbl.TextColor3 = UDim2.new(1, -58, 0, 16), UDim2.new(0, 58, 0, 16), 12, Enum.Font.GothamBold, tostring(petData.PetName), Color3.fromRGB(240, 253, 244)
+                    end
 
                     local rLbl = petCard:FindFirstChild("RarityLabel")
-                    rLbl.Size, rLbl.Position, rLbl.TextSize, rLbl.Font, rLbl.Text, rLbl.TextColor3 = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 32), 10, Enum.Font.GothamBold, "★ " .. tostring(petData.RarityName), petData.RarityColor
+                    if rLbl then
+                        rLbl.Size, rLbl.Position, rLbl.TextSize, rLbl.Font, rLbl.Text, rLbl.TextColor3 = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 32), 10, Enum.Font.GothamBold, "★ " .. tostring(petData.RarityName), petData.RarityColor
+                    end
 
                     local pLbl = petCard:FindFirstChild("PriceLabel")
-                    pLbl.Size, pLbl.Position, pLbl.TextSize, pLbl.Font, pLbl.Text, pLbl.TextColor3 = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 48), 10, Enum.Font.GothamSemibold, "💰 " .. tostring(petData.FormattedPrice), Color3.fromRGB(52, 211, 153)
+                    if pLbl then
+                        pLbl.Size, pLbl.Position, pLbl.TextSize, pLbl.Font, pLbl.Text, pLbl.TextColor3 = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 48), 10, Enum.Font.GothamSemibold, "💰 " .. tostring(petData.FormattedPrice), Color3.fromRGB(52, 211, 153)
+                    end
 
                     local iLbl = petCard:FindFirstChild("IncomeLabel")
-                    iLbl.Size, iLbl.Position, iLbl.TextSize, iLbl.Font, iLbl.Text, iLbl.TextColor3 = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 64), 10, Enum.Font.GothamSemibold, "⚡ " .. tostring(petData.FormattedIncome) .. "/s", Color3.fromRGB(255, 220, 100)
+                    if iLbl then
+                        iLbl.Size, iLbl.Position, iLbl.TextSize, iLbl.Font, iLbl.Text, iLbl.TextColor3 = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 64), 10, Enum.Font.GothamSemibold, "⚡ " .. tostring(petData.FormattedIncome) .. "/s", Color3.fromRGB(255, 220, 100)
+                    end
 
                     local rankB = petCard:FindFirstChild("RankBadge")
                     local countB = petCard:FindFirstChild("CountBadge")
