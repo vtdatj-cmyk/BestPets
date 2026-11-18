@@ -210,7 +210,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     if child.Name:match("^TopAfkRow_") then child:Destroy() end
                 end
                 if Window and Window.Notify then
-                    Window:Notify({Title = "Top Afk", Content = "Đã xóa sạch và làm mới danh sách Top Afk!", Duration = 2})
+                    Window:Notify({Title = "Top Afk", Content = "Đã làm mới danh sách thành công!", Duration = 2})
                 end
             end)
         end
@@ -223,7 +223,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     ModelName = pet.ModelName, PetName = pet.PetName, Mutation = pet.Mutation,
                     RawIncome = tonumber(pet.RawIncome) or 0, SellPriceVal = tonumber(pet.SellPriceVal) or 0,
                     RarityName = pet.RarityName or "Common", RarityColor = pet.RarityColor or Color3.fromRGB(190, 190, 200), Count = 1,
-                    Id = pet.Id, ImageId = pet.ImageId
+                    Id = pet.Id, ImageId = (pet.ImageId and pet.ImageId ~= "") and pet.ImageId or getPetImage(pet.ModelName, pet)
                 }
             else
                 groupedMap[groupKey].Count = groupedMap[groupKey].Count + 1
