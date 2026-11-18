@@ -1,18 +1,14 @@
-Không phải do code ở file chính này chưa cập nhật, mà là vì file module ngoài ([https://raw.githubusercontent.com/vtdatj-cmyk/BestPets/refs/heads/main/TFFA](https://raw.githubusercontent.com/vtdatj-cmyk/BestPets/refs/heads/main/TFFA)) mà bạn đang loadstring() trực tiếp trên GitHub chưa được cập nhật theo đoạn code hiển thị ảnh pet mới.
-Mỗi lần game chạy, nó sẽ tải file từ link GitHub BestPets kia về thực thi. Do đó, dù bạn có sửa code ở file chính này bao nhiêu lần đi nữa thì ảnh pet vẫn sẽ không hiện nếu như bạn chưa cập nhật lại nội dung code trên GitHub của module BestPets.
-Cách khắc phục:
-Bạn hãy truy cập vào kho lưu trữ (repository) GitHub chứa file TFFA của mục BestPets (vtdatj-cmyk/BestPets), dán đè toàn bộ đoạn code dưới đây vào và lưu lại. Khi đó, giao diện script chính của bạn sẽ tự động nhận diện và hiển thị chính xác ảnh gốc của pet.
-Nội dung code mới nhất cho file module BestPets (trên GitHub của bạn):
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 local AnimalsData = require(ReplicatedStorage:WaitForChild("AnimalsData"))
 local AnimalTemplates = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalTemplates"))
+local AnimalUtil = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalUtil"))
 
 local BestPetModule = {}
 
-function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
+function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
     local accumulatedTopAfkPets = {}
     local ignoredTopAfkIds = {}
     
@@ -61,35 +57,27 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
         saveConfigData()
     end
 
-    local function getPetImage(entry, modelName)
-        if type(entry) == "table" then
-            if entry.ImageId and type(entry.ImageId) == "string" and entry.ImageId ~= "" then
-                return entry.ImageId
-            elseif entry.Icon and type(entry.Icon) == "string" and entry.Icon ~= "" then
-                return entry.Icon
-            elseif entry.AssetId and type(entry.AssetId) == "string" and entry.AssetId ~= "" then
-                return entry.AssetId
-            end
-        end
-
+    -- Hàm tìm kiếm chính xác Icon/Image dựa trên AnimalsData và AnimalTemplates của game
+    local function getPetImage(modelName)
+        if not modelName then return "" end
         for _, categoryList in pairs(AnimalsData) do
             if type(categoryList) == "table" then
                 for _, petData in pairs(categoryList) do
-                    if type(petData) == "table" and petData.ModelName == modelName then
-                        if petData.ImageId and petData.ImageId ~= "" then return petData.ImageId end
-                        if petData.Icon and petData.Icon ~= "" then return petData.Icon end
-                        if petData.AssetId and petData.AssetId ~= "" then return petData.AssetId end
+                    if type(petData) == "table" and (petData.ModelName == modelName or petData.Name == modelName) then
+                        if petData.ImageId and type(petData.ImageId) == "string" and petData.ImageId ~= "" then
+                            return petData.ImageId
+                        elseif petData.Icon and type(petData.Icon) == "string" and petData.Icon ~= "" then
+                            return petData.Icon
+                        elseif petData.AssetId and type(petData.AssetId) == "string" and petData.AssetId ~= "" then
+                            return petData.AssetId
+                        end
                     end
                 end
             end
         end
-
+        
         local ok, img = pcall(function()
-            if AnimalTemplates and AnimalTemplates.GetImage then
-                return AnimalTemplates.GetImage(modelName)
-            elseif AnimalTemplates and AnimalTemplates.GetIcon then
-                return AnimalTemplates.GetIcon(modelName)
-            elseif AnimalTemplates and type(AnimalTemplates.Get) == "function" then
+            if AnimalTemplates and AnimalTemplates.Get then
                 local tData = AnimalTemplates.Get(modelName)
                 if tData then return tData.Image or tData.Icon or tData.ImageId end
             end
@@ -133,7 +121,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     hasNewData = true
                     local modelName = entry.ModelName or entry.Name or "DefaultPet"
                     local petName = entry.PetName or entry.DisplayName or AnimalNamesMap[modelName] or modelName or "Unknown"
-                    local petImage = getPetImage(entry, modelName)
+                    local petImage = getPetImage(modelName)
                     local sellPrice, incomeVal = 0, 0
                     if Mutations then
                         pcall(function()
@@ -225,7 +213,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     ModelName = pet.ModelName, PetName = pet.PetName, Mutation = pet.Mutation,
                     RawIncome = tonumber(pet.RawIncome) or 0, SellPriceVal = tonumber(pet.SellPriceVal) or 0,
                     RarityName = pet.RarityName or "Common", RarityColor = pet.RarityColor or Color3.fromRGB(190, 190, 200), Count = 1,
-                    ImageId = pet.ImageId
+                    ImageId = (pet.ImageId and pet.ImageId ~= "") and pet.ImageId or getPetImage(pet.ModelName)
                 }
             else
                 groupedMap[groupKey].Count = groupedMap[groupKey].Count + 1
@@ -342,12 +330,8 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     local iconFrame = petCard:FindFirstChild("IconFrame")
                     local iconImg = iconFrame and iconFrame:FindFirstChild("PetIcon")
                     if iconImg then
-                        if petData.ImageId and petData.ImageId ~= "" then
-                            iconImg.Image = petData.ImageId
-                        else
-                            local fallbackImg = getPetImage(nil, petData.ModelName)
-                            iconImg.Image = fallbackImg ~= "" and fallbackImg or ""
-                        end
+                        local finalImg = (petData.ImageId and petData.ImageId ~= "") and petData.ImageId or getPetImage(petData.ModelName)
+                        iconImg.Image = finalImg
                     end
 
                     local mutLbl = petCard:FindFirstChild("MutationLabel")
@@ -399,4 +383,3 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
 end
 
 return BestPetModule
-
