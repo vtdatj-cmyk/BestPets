@@ -4,11 +4,10 @@ local LocalPlayer = Players.LocalPlayer
 
 local AnimalsData = require(ReplicatedStorage:WaitForChild("AnimalsData"))
 local AnimalTemplates = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalTemplates"))
-local AnimalUtil = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalUtil"))
 
 local BestPetModule = {}
 
-function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
+function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
     local accumulatedTopAfkPets = {}
     local ignoredTopAfkIds = {}
     
@@ -57,25 +56,24 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, 
         saveConfigData()
     end
 
-    -- Hàm tìm kiếm chính xác Icon/Image dựa trên AnimalsData và AnimalTemplates của game
-    local function getPetImage(modelName)
+    local function getPetImage(modelName, entry)
+        if type(entry) == "table" then
+            if entry.ImageId and type(entry.ImageId) == "string" and entry.ImageId ~= "" then return entry.ImageId end
+            if entry.Icon and type(entry.Icon) == "string" and entry.Icon ~= "" then return entry.Icon end
+            if entry.AssetId and type(entry.AssetId) == "string" and entry.AssetId ~= "" then return entry.AssetId end
+        end
         if not modelName then return "" end
         for _, categoryList in pairs(AnimalsData) do
             if type(categoryList) == "table" then
                 for _, petData in pairs(categoryList) do
                     if type(petData) == "table" and (petData.ModelName == modelName or petData.Name == modelName) then
-                        if petData.ImageId and type(petData.ImageId) == "string" and petData.ImageId ~= "" then
-                            return petData.ImageId
-                        elseif petData.Icon and type(petData.Icon) == "string" and petData.Icon ~= "" then
-                            return petData.Icon
-                        elseif petData.AssetId and type(petData.AssetId) == "string" and petData.AssetId ~= "" then
-                            return petData.AssetId
-                        end
+                        if petData.ImageId and petData.ImageId ~= "" then return petData.ImageId end
+                        if petData.Icon and petData.Icon ~= "" then return petData.Icon end
+                        if petData.AssetId and petData.AssetId ~= "" then return petData.AssetId end
                     end
                 end
             end
         end
-        
         local ok, img = pcall(function()
             if AnimalTemplates and AnimalTemplates.Get then
                 local tData = AnimalTemplates.Get(modelName)
@@ -85,7 +83,6 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, 
         if ok and type(img) == "string" and img ~= "" then
             return img
         end
-
         return ""
     end
 
@@ -121,7 +118,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, 
                     hasNewData = true
                     local modelName = entry.ModelName or entry.Name or "DefaultPet"
                     local petName = entry.PetName or entry.DisplayName or AnimalNamesMap[modelName] or modelName or "Unknown"
-                    local petImage = getPetImage(modelName)
+                    local petImage = getPetImage(modelName, entry)
                     local sellPrice, incomeVal = 0, 0
                     if Mutations then
                         pcall(function()
