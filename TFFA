@@ -26,7 +26,8 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     RawIncome = tonumber(item.RawIncome) or 0,
                     SellPriceVal = tonumber(item.SellPriceVal) or 0,
                     RarityName = rInfo.Name or rName,
-                    RarityColor = rInfo.Color or Color3.fromRGB(190, 190, 200)
+                    RarityColor = rInfo.Color or Color3.fromRGB(190, 190, 200),
+                    ImageId = tostring(item.ImageId or "")
                 })
             end
         end
@@ -42,7 +43,8 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                 Mutation = pet.Mutation,
                 RawIncome = tonumber(pet.RawIncome) or 0,
                 SellPriceVal = tonumber(pet.SellPriceVal) or 0,
-                RarityName = tostring(pet.RarityName or "Common")
+                RarityName = tostring(pet.RarityName or "Common"),
+                ImageId = tostring(pet.ImageId or "")
             })
         end
         SavedConfig.TopAfkPets = serializedList
@@ -50,76 +52,30 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
         saveConfigData()
     end
 
-    local function renderViewportModel(viewport, petId, modelName, mutation)
-        if not viewport then return end
-        local currentKey = tostring(petId) .. "_" .. tostring(modelName) .. "_" .. tostring(mutation or "None")
-        if viewport:GetAttribute("RenderedKey") == currentKey and viewport:FindFirstChildWhichIsA("WorldModel") then
-            return
+    local function getPetImage(entry, modelName)
+        if type(entry) == "table" then
+            if entry.ImageId and type(entry.ImageId) == "string" and entry.ImageId ~= "" then
+                return entry.ImageId
+            elseif entry.Icon and type(entry.Icon) == "string" and entry.Icon ~= "" then
+                return entry.Icon
+            elseif entry.AssetId and type(entry.AssetId) == "string" and entry.AssetId ~= "" then
+                return entry.AssetId
+            end
         end
-        if viewport:GetAttribute("IsRendering") == currentKey then
-            return
-        end
-        viewport:SetAttribute("IsRendering", currentKey)
-
-        task.spawn(function()
-            local model = nil
-            local attempts = 0
-            while not model and attempts < 6 and AnimalUtil do
-                attempts = attempts + 1
-                pcall(function()
-                    model = AnimalUtil.Create(modelName)
-                end)
-                if not model then
-                    task.wait(0.2)
-                end
-            end
-
-            if not model or not viewport or not viewport.Parent then
-                if viewport then
-                    viewport:SetAttribute("IsRendering", nil)
-                end
-                return
-            end
-
-            for _, child in ipairs(viewport:GetChildren()) do
-                if not child:IsA("UICorner") then
-                    child:Destroy()
-                end
-            end
-
-            local okRender = pcall(function()
-                local worldModel = Instance.new("WorldModel")
-                worldModel.Parent = viewport
-
-                if Mutations and mutation and tostring(mutation) ~= "" and tostring(mutation) ~= "None" then
-                    pcall(function()
-                        Mutations.Apply(model, mutation, { Particles = false })
-                    end)
-                end
-
-                model.Parent = worldModel
-                model:PivotTo(CFrame.new(0, 0, 0))
-
-                local cam = Instance.new("Camera")
-                cam.FieldOfView = 45
-                cam.Parent = viewport
-                viewport.CurrentCamera = cam
-
-                local _, size = model:GetBoundingBox()
-                local maxDim = math.max(size.X, size.Y, size.Z)
-                if maxDim <= 0.1 then
-                    maxDim = 3
-                end
-
-                local dist = maxDim * 1.65
-                cam.CFrame = CFrame.new(Vector3.new(dist * 0.85, dist * 0.65, dist * 0.85), Vector3.new(0, 0, 0))
-            end)
-
-            viewport:SetAttribute("IsRendering", nil)
-            if okRender then
-                viewport:SetAttribute("RenderedKey", currentKey)
+        
+        -- Thử lấy từ AnimalUtil nếu có hàm lấy asset/image
+        local ok, img = pcall(function()
+            if AnimalUtil and AnimalUtil.GetImage then
+                return AnimalUtil.GetImage(modelName)
+            elseif AnimalUtil and AnimalUtil.GetIcon then
+                return AnimalUtil.GetIcon(modelName)
             end
         end)
+        if ok and type(img) == "string" and img ~= "" then
+            return img
+        end
+
+        return ""
     end
 
     function BestPetModule.UpdateFrames()
@@ -154,6 +110,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                     hasNewData = true
                     local modelName = entry.ModelName or entry.Name or "DefaultPet"
                     local petName = entry.PetName or entry.DisplayName or AnimalNamesMap[modelName] or modelName or "Unknown"
+                    local petImage = getPetImage(entry, modelName)
                     local sellPrice, incomeVal = 0, 0
                     if Mutations then
                         pcall(function()
@@ -177,7 +134,8 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         RawIncome = tonumber(incomeVal) or 0,
                         SellPriceVal = tonumber(sellPrice) or 0,
                         RarityName = rarityInfo.Name or rarityName,
-                        RarityColor = rarityInfo.Color or Color3.fromRGB(190, 190, 200)
+                        RarityColor = rarityInfo.Color or Color3.fromRGB(190, 190, 200),
+                        ImageId = petImage
                     })
                 end
             end
@@ -243,7 +201,8 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                 groupedMap[groupKey] = {
                     ModelName = pet.ModelName, PetName = pet.PetName, Mutation = pet.Mutation,
                     RawIncome = tonumber(pet.RawIncome) or 0, SellPriceVal = tonumber(pet.SellPriceVal) or 0,
-                    RarityName = pet.RarityName or "Common", RarityColor = pet.RarityColor or Color3.fromRGB(190, 190, 200), Count = 1
+                    RarityName = pet.RarityName or "Common", RarityColor = pet.RarityColor or Color3.fromRGB(190, 190, 200), Count = 1,
+                    ImageId = pet.ImageId
                 }
             else
                 groupedMap[groupKey].Count = groupedMap[groupKey].Count + 1
@@ -323,16 +282,16 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         countBadge.Font = Enum.Font.GothamBold
                         Instance.new("UICorner", countBadge).CornerRadius = UDim.new(0, 4)
 
-                        local viewport = Instance.new("ViewportFrame")
-                        viewport.Name = "Viewport"
-                        viewport.Size = UDim2.new(0, 48, 0, 48)
-                        viewport.Position = UDim2.new(0, 6, 0, 6)
-                        viewport.BackgroundColor3 = Color3.fromRGB(6, 20, 14)
-                        viewport.BackgroundTransparency = 0.3
-                        viewport.Ambient = Color3.fromRGB(180, 180, 180)
-                        viewport.LightColor = Color3.fromRGB(255, 255, 255)
-                        viewport.Parent = petCard
-                        Instance.new("UICorner", viewport).CornerRadius = UDim.new(0, 6)
+                        -- Thay thế ViewportFrame thành ImageLabel hiển thị ảnh gốc dạng tool
+                        local iconImg = Instance.new("ImageLabel")
+                        iconImg.Name = "PetIcon"
+                        iconImg.Size = UDim2.new(0, 48, 0, 48)
+                        iconImg.Position = UDim2.new(0, 6, 0, 6)
+                        iconImg.BackgroundColor3 = Color3.fromRGB(6, 20, 14)
+                        iconImg.BackgroundTransparency = 0.3
+                        iconImg.ScaleType = Enum.ScaleType.Fit
+                        iconImg.Parent = petCard
+                        Instance.new("UICorner", iconImg).CornerRadius = UDim.new(0, 6)
 
                         for _, lblName in ipairs({"MutationLabel", "NameLabel", "RarityLabel", "PriceLabel", "IncomeLabel"}) do
                             local l = Instance.new("TextLabel", petCard)
@@ -350,7 +309,14 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         else stroke.Color, stroke.Transparency = Color3.fromRGB(45, 130, 90), 0.55 end
                     end
 
-                    renderViewportModel(petCard:FindFirstChild("Viewport"), petData.ModelName, petData.ModelName, petData.Mutation)
+                    local iconImg = petCard:FindFirstChild("PetIcon")
+                    if iconImg then
+                        if petData.ImageId and petData.ImageId ~= "" then
+                            iconImg.Image = petData.ImageId
+                        else
+                            iconImg.Image = "" -- Để trống nếu không tìm thấy ảnh
+                        end
+                    end
 
                     local mutLbl = petCard:FindFirstChild("MutationLabel")
                     mutLbl.Size, mutLbl.Position, mutLbl.TextSize, mutLbl.Font = UDim2.new(1, -58, 0, 14), UDim2.new(0, 58, 0, 2), 10, Enum.Font.GothamBold
