@@ -1,3 +1,8 @@
+Không phải do code ở file chính này chưa cập nhật, mà là vì file module ngoài ([https://raw.githubusercontent.com/vtdatj-cmyk/BestPets/refs/heads/main/TFFA](https://raw.githubusercontent.com/vtdatj-cmyk/BestPets/refs/heads/main/TFFA)) mà bạn đang loadstring() trực tiếp trên GitHub chưa được cập nhật theo đoạn code hiển thị ảnh pet mới.
+Mỗi lần game chạy, nó sẽ tải file từ link GitHub BestPets kia về thực thi. Do đó, dù bạn có sửa code ở file chính này bao nhiêu lần đi nữa thì ảnh pet vẫn sẽ không hiện nếu như bạn chưa cập nhật lại nội dung code trên GitHub của module BestPets.
+Cách khắc phục:
+Bạn hãy truy cập vào kho lưu trữ (repository) GitHub chứa file TFFA của mục BestPets (vtdatj-cmyk/BestPets), dán đè toàn bộ đoạn code dưới đây vào và lưu lại. Khi đó, giao diện script chính của bạn sẽ tự động nhận diện và hiển thị chính xác ảnh gốc của pet.
+Nội dung code mới nhất cho file module BestPets (trên GitHub của bạn):
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
@@ -56,7 +61,6 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
         saveConfigData()
     end
 
-    -- Hàm lấy chính xác Icon/Image gốc của Pet giống hệt hệ thống SellShop
     local function getPetImage(entry, modelName)
         if type(entry) == "table" then
             if entry.ImageId and type(entry.ImageId) == "string" and entry.ImageId ~= "" then
@@ -68,7 +72,6 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
             end
         end
 
-        -- Quét trong AnimalsData
         for _, categoryList in pairs(AnimalsData) do
             if type(categoryList) == "table" then
                 for _, petData in pairs(categoryList) do
@@ -81,7 +84,6 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
             end
         end
 
-        -- Thử lấy từ AnimalTemplates nếu game hỗ trợ hàm trả về asset icon
         local ok, img = pcall(function()
             if AnimalTemplates and AnimalTemplates.GetImage then
                 return AnimalTemplates.GetImage(modelName)
@@ -303,7 +305,6 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         countBadge.Font = Enum.Font.GothamBold
                         Instance.new("UICorner", countBadge).CornerRadius = UDim.new(0, 4)
 
-                        -- Khung chứa ảnh pet (tái tạo khung card icon chuẩn giống SellShop)
                         local iconFrame = Instance.new("Frame")
                         iconFrame.Name = "IconFrame"
                         iconFrame.Size = UDim2.new(0, 48, 0, 48)
@@ -344,7 +345,6 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         if petData.ImageId and petData.ImageId ~= "" then
                             iconImg.Image = petData.ImageId
                         else
-                            -- Fallback tự động tìm lại trực tiếp từ AnimalsData nếu chưa có
                             local fallbackImg = getPetImage(nil, petData.ModelName)
                             iconImg.Image = fallbackImg ~= "" and fallbackImg or ""
                         end
@@ -399,3 +399,4 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
 end
 
 return BestPetModule
+
