@@ -1,5 +1,3 @@
--- BestPet Module (Raw GitHub)
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
@@ -55,32 +53,71 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
     local function renderViewportModel(viewport, petId, modelName, mutation)
         if not viewport then return end
         local currentKey = tostring(petId) .. "_" .. tostring(modelName) .. "_" .. tostring(mutation or "None")
-        if viewport:GetAttribute("RenderedKey") == currentKey then return end
-        viewport:SetAttribute("RenderedKey", currentKey)
-
-        for _, child in ipairs(viewport:GetChildren()) do
-            if not child:IsA("UICorner") then child:Destroy() end
+        if viewport:GetAttribute("RenderedKey") == currentKey and viewport:FindFirstChildWhichIsA("WorldModel") then
+            return
         end
+        if viewport:GetAttribute("IsRendering") == currentKey then
+            return
+        end
+        viewport:SetAttribute("IsRendering", currentKey)
 
         task.spawn(function()
             local model = nil
             local attempts = 0
-            while not model and attempts < 3 and AnimalUtil do
+            while not model and attempts < 6 and AnimalUtil do
                 attempts = attempts + 1
-                pcall(function() model = AnimalUtil.Create(modelName) end)
-                if not model then task.wait(0.1) end
-            end
-            if model and viewport and viewport.Parent then
                 pcall(function()
-                    if Mutations then Mutations.Apply(model, mutation, { Particles = false }) end
-                    model.Parent = viewport
-                    local cam = Instance.new("Camera", model)
-                    viewport.CurrentCamera = cam
-                    local cf, size = model:GetBoundingBox()
-                    local maxDim = math.max(size.X, size.Y, size.Z)
-                    if maxDim == 0 then maxDim = 3 end
-                    cam.CFrame = CFrame.new(cf.Position + Vector3.new(maxDim * 1.5, maxDim * 1.1, maxDim * 1.5), cf.Position)
+                    model = AnimalUtil.Create(modelName)
                 end)
+                if not model then
+                    task.wait(0.2)
+                end
+            end
+
+            if not model or not viewport or not viewport.Parent then
+                if viewport then
+                    viewport:SetAttribute("IsRendering", nil)
+                end
+                return
+            end
+
+            for _, child in ipairs(viewport:GetChildren()) do
+                if not child:IsA("UICorner") then
+                    child:Destroy()
+                end
+            end
+
+            local okRender = pcall(function()
+                local worldModel = Instance.new("WorldModel")
+                worldModel.Parent = viewport
+
+                if Mutations and mutation and tostring(mutation) ~= "" and tostring(mutation) ~= "None" then
+                    pcall(function()
+                        Mutations.Apply(model, mutation, { Particles = false })
+                    end)
+                end
+
+                model.Parent = worldModel
+                model:PivotTo(CFrame.new(0, 0, 0))
+
+                local cam = Instance.new("Camera")
+                cam.FieldOfView = 45
+                cam.Parent = viewport
+                viewport.CurrentCamera = cam
+
+                local _, size = model:GetBoundingBox()
+                local maxDim = math.max(size.X, size.Y, size.Z)
+                if maxDim <= 0.1 then
+                    maxDim = 3
+                end
+
+                local dist = maxDim * 1.65
+                cam.CFrame = CFrame.new(Vector3.new(dist * 0.85, dist * 0.65, dist * 0.85), Vector3.new(0, 0, 0))
+            end)
+
+            viewport:SetAttribute("IsRendering", nil)
+            if okRender then
+                viewport:SetAttribute("RenderedKey", currentKey)
             end
         end)
     end
@@ -292,6 +329,8 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         viewport.Position = UDim2.new(0, 6, 0, 6)
                         viewport.BackgroundColor3 = Color3.fromRGB(6, 20, 14)
                         viewport.BackgroundTransparency = 0.3
+                        viewport.Ambient = Color3.fromRGB(180, 180, 180)
+                        viewport.LightColor = Color3.fromRGB(255, 255, 255)
                         viewport.Parent = petCard
                         Instance.new("UICorner", viewport).CornerRadius = UDim.new(0, 6)
 
