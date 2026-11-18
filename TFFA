@@ -4,11 +4,10 @@ local LocalPlayer = Players.LocalPlayer
 
 local AnimalsData = require(ReplicatedStorage:WaitForChild("AnimalsData"))
 local AnimalTemplates = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalTemplates"))
-local AnimalUtil = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalUtil"))
 
 local BestPetModule = {}
 
-function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
+function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
     local accumulatedTopAfkPets = {}
     local ignoredTopAfkIds = {}
     
@@ -57,7 +56,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, 
         saveConfigData()
     end
 
-    -- Lấy ảnh gốc của pet từ AnimalsData hoặc AnimalTemplates/AnimalUtil giống hệ thống SellShop
+    -- Hàm lấy chính xác Icon/Image gốc của Pet giống hệt hệ thống SellShop
     local function getPetImage(entry, modelName)
         if type(entry) == "table" then
             if entry.ImageId and type(entry.ImageId) == "string" and entry.ImageId ~= "" then
@@ -69,24 +68,28 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, 
             end
         end
 
-        -- Tìm kiếm trong AnimalsData giống cấu trúc game
+        -- Quét trong AnimalsData
         for _, categoryList in pairs(AnimalsData) do
             if type(categoryList) == "table" then
                 for _, petData in pairs(categoryList) do
                     if type(petData) == "table" and petData.ModelName == modelName then
                         if petData.ImageId and petData.ImageId ~= "" then return petData.ImageId end
                         if petData.Icon and petData.Icon ~= "" then return petData.Icon end
+                        if petData.AssetId and petData.AssetId ~= "" then return petData.AssetId end
                     end
                 end
             end
         end
 
-        -- Thử lấy qua AnimalTemplates hoặc AnimalUtil nếu có hỗ trợ
+        -- Thử lấy từ AnimalTemplates nếu game hỗ trợ hàm trả về asset icon
         local ok, img = pcall(function()
             if AnimalTemplates and AnimalTemplates.GetImage then
                 return AnimalTemplates.GetImage(modelName)
-            elseif AnimalUtil and AnimalUtil.GetImage then
-                return AnimalUtil.GetImage(modelName)
+            elseif AnimalTemplates and AnimalTemplates.GetIcon then
+                return AnimalTemplates.GetIcon(modelName)
+            elseif AnimalTemplates and type(AnimalTemplates.Get) == "function" then
+                local tData = AnimalTemplates.Get(modelName)
+                if tData then return tData.Image or tData.Icon or tData.ImageId end
             end
         end)
         if ok and type(img) == "string" and img ~= "" then
@@ -300,16 +303,24 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, 
                         countBadge.Font = Enum.Font.GothamBold
                         Instance.new("UICorner", countBadge).CornerRadius = UDim.new(0, 4)
 
-                        -- Sử dụng ImageLabel thay thế cho ViewportFrame cũ để hiển thị ảnh gốc dạng tool
+                        -- Khung chứa ảnh pet (tái tạo khung card icon chuẩn giống SellShop)
+                        local iconFrame = Instance.new("Frame")
+                        iconFrame.Name = "IconFrame"
+                        iconFrame.Size = UDim2.new(0, 48, 0, 48)
+                        iconFrame.Position = UDim2.new(0, 6, 0, 6)
+                        iconFrame.BackgroundColor3 = Color3.fromRGB(6, 20, 14)
+                        iconFrame.BackgroundTransparency = 0.3
+                        iconFrame.Parent = petCard
+                        Instance.new("UICorner", iconFrame).CornerRadius = UDim.new(0, 6)
+
                         local iconImg = Instance.new("ImageLabel")
                         iconImg.Name = "PetIcon"
-                        iconImg.Size = UDim2.new(0, 48, 0, 48)
-                        iconImg.Position = UDim2.new(0, 6, 0, 6)
-                        iconImg.BackgroundColor3 = Color3.fromRGB(6, 20, 14)
-                        iconImg.BackgroundTransparency = 0.3
+                        iconImg.Size = UDim2.new(0.9, 0, 0.9, 0)
+                        iconImg.Position = UDim2.new(0.5, 0, 0.5, 0)
+                        iconImg.AnchorPoint = Vector2.new(0.5, 0.5)
+                        iconImg.BackgroundTransparency = 1
                         iconImg.ScaleType = Enum.ScaleType.Fit
-                        iconImg.Parent = petCard
-                        Instance.new("UICorner", iconImg).CornerRadius = UDim.new(0, 6)
+                        iconImg.Parent = iconFrame
 
                         for _, lblName in ipairs({"MutationLabel", "NameLabel", "RarityLabel", "PriceLabel", "IncomeLabel"}) do
                             local l = Instance.new("TextLabel", petCard)
@@ -327,12 +338,15 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, 
                         else stroke.Color, stroke.Transparency = Color3.fromRGB(45, 130, 90), 0.55 end
                     end
 
-                    local iconImg = petCard:FindFirstChild("PetIcon")
+                    local iconFrame = petCard:FindFirstChild("IconFrame")
+                    local iconImg = iconFrame and iconFrame:FindFirstChild("PetIcon")
                     if iconImg then
                         if petData.ImageId and petData.ImageId ~= "" then
                             iconImg.Image = petData.ImageId
                         else
-                            iconImg.Image = ""
+                            -- Fallback tự động tìm lại trực tiếp từ AnimalsData nếu chưa có
+                            local fallbackImg = getPetImage(nil, petData.ModelName)
+                            iconImg.Image = fallbackImg ~= "" and fallbackImg or ""
                         end
                     end
 
