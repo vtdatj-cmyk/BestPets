@@ -1,9 +1,14 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
+
+local AnimalsData = require(ReplicatedStorage:WaitForChild("AnimalsData"))
+local AnimalTemplates = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalTemplates"))
+local AnimalUtil = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("AnimalUtil"))
 
 local BestPetModule = {}
 
-function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
+function BestPetModule.Init(Window, DataController, Mutations, AnimalUtilParam, RarityConfigRemote, MutationsConfigRemote, AnimalNamesMap, SavedConfig, saveConfigData, formatMoneySafe)
     local accumulatedTopAfkPets = {}
     local ignoredTopAfkIds = {}
     
@@ -52,6 +57,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
         saveConfigData()
     end
 
+    -- Lấy ảnh gốc của pet từ AnimalsData hoặc AnimalTemplates/AnimalUtil giống hệ thống SellShop
     local function getPetImage(entry, modelName)
         if type(entry) == "table" then
             if entry.ImageId and type(entry.ImageId) == "string" and entry.ImageId ~= "" then
@@ -62,13 +68,25 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                 return entry.AssetId
             end
         end
-        
-        -- Thử lấy từ AnimalUtil nếu có hàm lấy asset/image
+
+        -- Tìm kiếm trong AnimalsData giống cấu trúc game
+        for _, categoryList in pairs(AnimalsData) do
+            if type(categoryList) == "table" then
+                for _, petData in pairs(categoryList) do
+                    if type(petData) == "table" and petData.ModelName == modelName then
+                        if petData.ImageId and petData.ImageId ~= "" then return petData.ImageId end
+                        if petData.Icon and petData.Icon ~= "" then return petData.Icon end
+                    end
+                end
+            end
+        end
+
+        -- Thử lấy qua AnimalTemplates hoặc AnimalUtil nếu có hỗ trợ
         local ok, img = pcall(function()
-            if AnimalUtil and AnimalUtil.GetImage then
+            if AnimalTemplates and AnimalTemplates.GetImage then
+                return AnimalTemplates.GetImage(modelName)
+            elseif AnimalUtil and AnimalUtil.GetImage then
                 return AnimalUtil.GetImage(modelName)
-            elseif AnimalUtil and AnimalUtil.GetIcon then
-                return AnimalUtil.GetIcon(modelName)
             end
         end)
         if ok and type(img) == "string" and img ~= "" then
@@ -282,7 +300,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         countBadge.Font = Enum.Font.GothamBold
                         Instance.new("UICorner", countBadge).CornerRadius = UDim.new(0, 4)
 
-                        -- Thay thế ViewportFrame thành ImageLabel hiển thị ảnh gốc dạng tool
+                        -- Sử dụng ImageLabel thay thế cho ViewportFrame cũ để hiển thị ảnh gốc dạng tool
                         local iconImg = Instance.new("ImageLabel")
                         iconImg.Name = "PetIcon"
                         iconImg.Size = UDim2.new(0, 48, 0, 48)
@@ -314,7 +332,7 @@ function BestPetModule.Init(Window, DataController, Mutations, AnimalUtil, Rarit
                         if petData.ImageId and petData.ImageId ~= "" then
                             iconImg.Image = petData.ImageId
                         else
-                            iconImg.Image = "" -- Để trống nếu không tìm thấy ảnh
+                            iconImg.Image = ""
                         end
                     end
 
